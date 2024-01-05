@@ -125,12 +125,47 @@ module.zap			=	zap
 module.it			=	it
 
 -- math funcs
+function deg2(rad)
+    local angle = math.deg(rad)
+    if angle < 0 then
+        angle = angle + 360
+    end
+    return angle
+end
+function degxy(x, y)
+    -- Ensure the angle is positive deg2
+    local angle = deg2(math.atan2(y, x))
+    -- Calculate the clock division (1 to 12)
+    local division = math.floor((angle + 15) / 30) % 12 + 1
+    return division, angle
+end
+
+-- function degclock(rad)
+--     -- Ensure the angle is positive deg2
+--     local angle = deg2(rad)
+--     -- Calculate the clock division (1 to 12)
+--     local division = math.floor((angle + 15) / 30) % 12 + 1
+--     return division, angle
+-- end
+
+function degclock(deg)
+    return (360-deg+90)/6/5 % 12
+end
+
+function degsec(deg)
+    return (360-deg+90)/6 % 60
+end
+
 module.add = function(i, v)	return i+v end
 module.sub = function(i, v)	return i-v end
 module.mul = function(i, v)	return i*v end
 module.div = function(i, v)	return i/v end
 module.mod = function(i, v)	return i%v end
 module.deg = math.deg
+module.deg2 = deg2
+module.degxy = degxy
+module.degclock = degclock
+module.degsec = degsec
 module.rad = math.rad
 module.sin = math.sin
 module.cos = math.cos

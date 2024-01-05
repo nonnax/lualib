@@ -43,14 +43,21 @@ local function fromAngle(theta)
   return new(math.cos(theta), -math.sin(theta))
 end
 
--- makes a vector with a random direction
-local function random()
-  return fromAngle(rand() * math.pi*2)
-end
 
 -- check if an object is a vector
 local function isvector(t)
   return getmetatable(t) == vector
+end
+
+-- get the distance between two vectors
+local function dist(a,b)
+  assert(isvector(a) and isvector(b), "dist: wrong argument types (expected <vector> and <vector>)")
+  return math.sqrt((a.x-b.x)^2 + (a.y-b.y)^2)
+end
+
+-- makes a vector with a random direction
+local function random()
+  return fromAngle(rand() * math.pi*2)
 end
 
 -- set the values of the vector to something new
@@ -181,11 +188,6 @@ function vector:projectTo(b)
   return v * self:projection(b)
 end
 
--- get the distance between two vectors
-function vector.dist(a,b)
-  assert(isvector(a) and isvector(b), "dist: wrong argument types (expected <vector> and <vector>)")
-  return math.sqrt((a.x-b.x)^2 + (a.y-b.y)^2)
-end
 
 -- return the dot product of the vector
 function vector:dot(v)
@@ -253,4 +255,5 @@ module.new = new
 module.random = random
 module.fromAngle = fromAngle
 module.isvector = isvector
+module.dist = dist
 return setmetatable(module, {__call = function(_,...) return new(...) end})
