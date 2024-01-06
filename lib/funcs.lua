@@ -125,14 +125,14 @@ module.zap			=	zap
 module.it			=	it
 
 -- math funcs
-function deg2(rad)
+local function deg2(rad)
     local angle = math.deg(rad)
     if angle < 0 then
         angle = angle + 360
     end
     return angle
 end
-function degxy(x, y)
+local function degxy(x, y)
     -- Ensure the angle is positive deg2
     local angle = deg2(math.atan2(y, x))
     -- Calculate the clock division (1 to 12)
@@ -148,12 +148,16 @@ end
 --     return division, angle
 -- end
 
-function degclock(deg)
+local function degclock(deg)
     return (360-deg+90)/6/5 % 12
 end
 
-function degsec(deg)
+local function degsec(deg)
     return (360-deg+90)/6 % 60
+end
+
+local function round(n)
+  return math.floor((math.floor(n*2) + 1)/2)
 end
 
 module.add = function(i, v)	return i+v end
@@ -171,6 +175,7 @@ module.sin = math.sin
 module.cos = math.cos
 module.tan = math.tan
 module.atan = math.atan
+module.round = math.round
 
 -- string funcs
 local function split_on(pat)
@@ -183,7 +188,12 @@ local function split_on(pat)
    end
 end
 
+local function split_at(str, i)
+			return str:sub(1, i), str:sub(i+1, -1)
+end
+
 module.split_on	=	split_on
+module.split_at	=	split_at
 
 -- table.insert does not return the table
 local function push(t, e)
