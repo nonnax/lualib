@@ -233,4 +233,15 @@ module.shift1	=	shift1
 module.pop1		=	pop1
 module.keys		=	keys
 
+local mt = debug.getmetatable(0) or {}
+mt.__call = function(a,b)  -- a, b - positive integer numbers
+   local numbers={}
+   for i=a, b do
+      numbers[#numbers+1]=i
+   end
+   return numbers
+end
+-- it works for numbers too! debug.setmetatable behaves very differently from plain setmetatable !!
+debug.setmetatable(0, mt)
+
 return module

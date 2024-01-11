@@ -20,6 +20,29 @@
 -- @return on success: a tabler-table or atomic/multi value (returns of pop() or shift(), etc).
 -- @return on fail: returns the original table, and a false flag.
 -- @author nonnax@https://github.com/nonnax
+
+
+
+---Checks if a table is an array of values.
+-- @param t table
+-- @return nil,error string if t is not a table
+-- @return true/false if t is an array/isn't an array
+-- NOTE: it returns true for an empty table
+function isArray(t)
+	if type(t)~="table" then return nil,"Argument is not a table! It is: "..type(t) end
+	--check if all the table keys are numerical and count their number
+	local count=0
+	for k,v in pairs(t) do
+		if type(k)~="number" then return false else count=count+1 end
+	end
+	--all keys are numerical. now let's see if they are sequential and start with 1
+	for i=1,count do
+		--Hint: the VALUE might be "nil", in that case "not t[i]" isn't enough, that's why we check the type
+		if not t[i] and type(t[i])~="nil" then return false end
+	end
+	return true
+end
+
 function serialize(tbl, indent)
     indent = indent or 1
     local indentStr = string.rep("  ", indent)
@@ -43,8 +66,19 @@ function serialize(tbl, indent)
     return result
 end
 
+-- inspect print ala-ruby
+function pp(...)
+	if type(...)=='table' then
+		print(serialize(...))
+	else
+		print(...)
+	end
+	return ...
+end
+
 local function tabler(t)
-	  local self = getmetatable(t) or {}
+	  -- local self = getmetatable(t) or {}
+	  local self = {}
 	  self.__tostring=serialize
 
 	  self.__index = function(t, k)
@@ -64,7 +98,7 @@ local function tabler(t)
 		 		 else
 		 		 	 -- just return orig table, and a false flag
 		 		 	 -- return t, false
-		 		 	 p(k, ..., 'not found')
+		 		 	 print(k, ..., 'not found')
 		 		 	 return nil
 		 		 end
 		 	end

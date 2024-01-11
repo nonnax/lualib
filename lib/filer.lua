@@ -15,6 +15,8 @@ local function file_exists(name)
    if f~=nil then io.close(f) return true else return false end
 end
 
+io.exists=file_exists
+
 local function Filer(name, data, err)
 	local data = data or ""
 	local self = {

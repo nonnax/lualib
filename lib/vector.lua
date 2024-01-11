@@ -84,9 +84,25 @@ function vector:mirrorX()
   return new(-self.x, self.y)
 end
 
+
 -- returns a mirrorY copy of a vector
 function vector:mirrorY()
   return new(self.x, -self.y)
+end
+
+-- returns a flipX copy of a vector
+function vector:flipX()
+  return new(-self.x, self.y)
+end
+
+-- returns a flipY copy of a vector
+function vector:flipY()
+  return new(self.x, -self.y)
+end
+
+-- returns vector
+function vector.lerp(a, b, s)
+	return a + (b - a) * s
 end
 
 -- get the magnitude of a vector
@@ -127,7 +143,7 @@ function vector.__sub(a,b)
   return new(a.x-b.x, a.y-b.y)
 end
 
--- meta function to multiply vectors
+-- meta function to multiply vectors by a scalar
 function vector.__mul(a,b)
   if type(a) == 'number' then
     return new(a * b.x, a * b.y)
@@ -229,12 +245,14 @@ function vector:heading()
 end
 
 -- rotate a vector clockwise by a certain number of radians
+-- rotated: new(cos*v.x - sin*v.y,  sin*v.x +  cos*v.y)
+
 function vector:rotate(theta)
   local s = math.sin(theta)
   local c = math.cos(theta)
   local v = new(
                 (c * self.x) + (s * self.y),
-                -(s * self.x) + (c * self.y))
+               -(s * self.x) + (c * self.y))
   self:replace(v)
   return self
 end
@@ -249,6 +267,81 @@ function vector:unpack()
   return self.x, self.y
 end
 
+--- Get the perpendicular vector of a vector.
+-- @tparam vec2 a Vector to get perpendicular axes from
+-- @treturn vec2 out
+function vector.perpendicular(a)
+	return new(-a.y, a.x)
+end
+
+--- Signed angle from one vector to another.
+-- Rotations from +x to +y are positive.
+-- @tparam vec2 a Vector
+-- @tparam vec2 b Vector
+-- @treturn number angle in (-pi, pi]
+function vector.angle_to(a, b)
+  assert(isvector(b), "dot: wrong argument type (expected <vector>)")
+  local angle = math.atan2(b.y, b.x) - math.atan2(a.y, a.x)
+  -- convert to (-pi, pi]
+  if angle > math.pi       then
+  	angle = angle - 2 * math.pi
+  elseif angle <= -math.pi then
+  	angle = angle + 2 * math.pi
+  end
+  return angle
+end
+
+--- Unsigned angle between two vectors.
+-- Directionless and thus commutative.
+-- @tparam vec2 a Vector
+-- @tparam vec2 b Vector
+-- @treturn number angle in [0, pi]
+function vector.angle_between(a, b)
+  assert(isvector(b), "dot: wrong argument type (expected <vector>)")
+	return math.acos(a:dot(b) / (a:getmag() * b:getmag()))
+end
+
+
+local function clamp(x, min, max)
+  -- because Mike Pall says math.min and math.max are JIT-optimized
+  return math.min(math.max(min, x), max)
+end
+
+function vector.clamp(v, topleft, bottomright)
+  -- clamps a vector to a certain bounding box about the origin
+  return new(
+    clamp(v.x, topleft.x, bottomright.x),
+    clamp(v.y, topleft.y, bottomright.y)
+  )
+end
+
+-- function to multiply two vectors
+-- also known as "Componentwise multiplication"
+function vector.hadamard(a, b)
+  return new(a.x * b.x, a.y * b.y)
+end
+
+function vector.rotated(v, angle)
+  local cos = math.cos(angle)
+  local sin = math.sin(angle)
+  return new(v.x * cos - v.y * sin, v.x * sin + v.y * cos)
+end
+
+local dirs = {
+  up = vector(0,-1),
+  down = vector(0,1),
+  left = vector(-1,0),
+  right = vector(1,0),
+  top = vector(0,-1),
+  bottom = vector(0,1)
+}
+
+local function dir(dir)
+  return dirs[dir] and dirs[dir].copy or Vector()
+end
+
+-- free math function
+math.clamp = clamp
 
 -- pack up and return module
 module.new = new
@@ -256,4 +349,6 @@ module.random = random
 module.fromAngle = fromAngle
 module.isvector = isvector
 module.dist = dist
+module.dir = dir
+
 return setmetatable(module, {__call = function(_,...) return new(...) end})
