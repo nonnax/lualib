@@ -34,6 +34,7 @@ end
 function p5.constrain(n, low, high)
     return math.max(low, math.min(n, high))
 end
+p5.clamp=p5.constrain
 
 function p5.map(value, start1, stop1, start2, stop2)
     return start2 + (stop2 - start2) * ((value - start1) / (stop1 - start1))
