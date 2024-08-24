@@ -2,21 +2,23 @@
 
 -- id$ nonnax fri jul 19 09:59:27 2024
 -- https://github.com/nonnax
-require 'luatools'
+require 'luatools/stdlibx'
 -- box_grid.lua
 local Colorgrid = {}
 
--- already in luatools
--- function math.scale(v, vmin, vmax, scalemin, scalemax)
--- function io.cols()
-
--- create a new box_grid instance
+Colorgrid.vbar = '┃'
+Colorgrid.bar  = '█'
+Colorgrid.wick = "│"
 
 function Colorgrid.new(params)
 
   local self = {
     width = params.width or io.cols(), -- width of the grid
     height = params.height or 50, -- height of the grid
+    xmin = params.xmin or 0, -- min of data
+    xmax = params.xmax or 100, -- max  of data
+    ymin = params.ymin or 0, -- min of data
+    ymax = params.ymax or 100, -- max  of data
     dot = params.dot or '┃',
     vbar = '┃',
     bar  = '█',
@@ -31,11 +33,14 @@ function Colorgrid.new(params)
     for y = 1, self.height do self.grid[x][y] = nil end
   end
 
+  -- inverted y-coord canvas
   function self:scale_y(y, ymin, ymax)
-    return math.floor(math.scale(y, ymin, ymax, self.height, 1))
+    local ymin, ymax = ymin or self.ymin, ymax or self.ymax
+    return math.floor(math.scale(y, ymin, ymax, 1, self.height))
   end
 
   function self:scale_x(x, xmin, xmax)
+    local xmin, xmax = xmin or self.xmin, xmax or self.xmax
     return math.floor(math.scale(x, xmin, xmax, 1, self.width))
   end
 
@@ -44,31 +49,13 @@ function Colorgrid.new(params)
            yi >= 1 and yi <= self.height
   end
 
-  -- scale values to grid coordinates
-  function self:scale_to_grid(x_value, y_value)
-    local xi = self:scale_x(x_value, self.x_min, self.x_max)
-    local yi = self:scale_y(y_value, self.y_min, self.y_max)
-    return xi, yi
-  end
-
   -- set a value in the grid with a specific color
   function self:point(xi, yi, color, dot)
-    local xi, yi = math.floor(xi), math.floor(yi)
-    if self:is_valid_indexes(xi, yi) then
-      self.grid[xi][yi] = {color=color, dot = dot or self.dot}
+    local x, y = math.floor(xi), math.floor(yi)
+    if self:is_valid_indexes(x, y) then
+      self.grid[x][y] = {color=color, dot = dot or self.dot}
     end
   end
-
-  -- get a value from the grid
-  function self:get_value(x_value, y_value)
-    local xi, yi = self:scale_to_grid(x_value, y_value)
-    if self:valid_indexes(xi, yi) then
-      return self.grid[xi][yi]
-    else
-      return nil
-    end
-  end
-
 
   function self:line(x1, y1, x2, y2, color, dot)
       -- Initialize the differences and steps
@@ -112,11 +99,11 @@ function Colorgrid.new(params)
   -- plot the grid as points on an ansi terminal screen using a buffer
   function self:draw(fx)
     local buffer = {}
-    for j = self.height, 1, -1 do
+    for y = self.height, 1, -1 do
       local line = {}
-      for i = 1, self.width do
-        if self.grid[i][j] then
-          local point = self.grid[i][j]
+      for x = 1, self.width do
+        if self.grid[x][y] then
+          local point = self.grid[x][y]
           table.insert(line, colors[point.color] .. point.dot .. colors.reset)
         else
           table.insert(line, self.dash)

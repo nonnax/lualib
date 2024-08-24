@@ -18,8 +18,9 @@ end
 --     return result
 -- end
 
-function timestamp_to_s(time) return
-  os.date("%x %X", tonumber(time or 1) / 1000) end
+function timestamp_to_s(time)
+  return os.date("%x %X", tonumber(time or 1) / 1000)
+end
 
 -- function table.remap_ohlc(t)
 --   local data={}
@@ -45,9 +46,11 @@ end
 function table.minmaxvol(ohlc_data)
   local min_low = reduce_by(ohlc_data, math.min, math.huge, 'low')
   local max_high = reduce_by(ohlc_data, math.max, -math.huge, 'high')
-  local max_volume = reduce_by(ohlc_data, math.max, -math.huge, 'volume')
+  local volume = FP.map(ohlc_data, function(r) return r.volume end)
+  local max_volume = math.max(unpack(volume))
+  local min_volume = math.min(unpack(volume))
 
-  return min_low, max_high, max_volume
+  return min_low, max_high, max_volume, min_volume
 end
 
 -- Function to normalize OHLC data
@@ -77,4 +80,39 @@ function table.normalize_ohlc(ohlc_data, scale_min, scale_max)
   end
 
   return normalized_data, min_low, max_high, max_volume
+end
+
+function table.min_max(...)
+  function traverse(acc, ...)
+    for i, v in ipairs({...}) do
+      if type(v)=='table' then
+        if #v > 0 then
+          traverse(acc, unpack(v))
+        end
+      else
+        table.insert(acc, v)
+      end
+    end
+    local tmin, tmax = math.min(unpack(acc)), math.max(unpack(acc))
+    return tmin, tmax
+  end
+  local min, max = traverse({}, ...)
+  return min, max
+end
+
+
+function table.extent(...)
+  local acc={}
+  for i, v in ipairs({...}) do
+    if type(v)=='table' then
+      if #v > 0 then
+        table.insert(acc, math.min(unpack(v)))
+        table.insert(acc, math.max(unpack(v)))
+      end
+    else
+      table.insert(acc, v)
+    end
+  end
+  local tmin, tmax = math.min(unpack(acc)), math.max(unpack(acc))
+  return tmin, tmax
 end

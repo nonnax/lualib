@@ -3,6 +3,8 @@
 -- https://github.com/nonnax
 -- functional.lua
 
+unpack = table.unpack or unpack
+
 function Map(data)
   local self = {value = data}
   function self.tap(self, fx, ...)
@@ -13,6 +15,16 @@ function Map(data)
     return Map(fx(self.value, ...))
   end
   return self
+end
+
+function _(data)
+  local self = { value = data}
+  function self._(self, fx, ...)
+    return _(fx(self.value, ...))
+  end
+  return setmetatable(self, {
+    __call=function(self) return self.value end
+  })
 end
 
 local Functional = {}
@@ -359,11 +371,8 @@ function Functional.last(tbl, n)
 end
 
 function Functional.insert(tbl, idx, v)
-    if not v then
-      v = idx
-      idx = #tbl
-    end
-    table.insert(tbl, idx, v)
+    local params=Functional.filter({idx, v}, -[[ x | x ~= nil ]])
+    table.insert(tbl, unpack(params))
     return tbl
 end
 

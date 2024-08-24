@@ -158,7 +158,7 @@ end
 -- end
 
 -- return optimal fmt based on maxvalue and a default fmt string
-function optimal_fmt(maxvalue, fmt)
+function optimal_fmt(fmt, maxvalue)
   local fmt = fmt or "%.2f"
   local orig_fmt = fmt:match("[^%%]+")
   local width = string.format(fmt, maxvalue):len()
