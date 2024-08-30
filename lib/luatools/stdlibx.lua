@@ -3,7 +3,7 @@
 -- Id$ nonnax Fri Jul  5 16:30:06 2024
 -- https://github.com/nonnax
 -- require 'luatools'
-
+require 'luatools/tablext'
 table.unpack = unpack
 
 -------------------------------------------------------------------------------------
@@ -23,6 +23,14 @@ function io.readfile(path)
   return content
 end
 
+function io.readfile_safe(path, default)
+  local res = default or ""
+  if io.exists(path) then
+    res = io.readfile(path)
+  end
+  return res
+end
+
 function io.writefile(path, content)
   local file = assert(io.open(path, "w"))
   assert(file:write(content))
@@ -36,6 +44,9 @@ function io.capture(cmd)
   return stdout
 end
 
+-- alias
+os.capture=io.capture
+
 function io.filetime(path)
   local t = lfs.attributes(path, 'modification')
   return t
@@ -46,9 +57,17 @@ os.filetime = io.filetime
 
 -- file utils
 
-function io.readjson(f)
-  local text = assert(io.readfile(f), 'file not found')
+function io.readjson(path)
+  local text = assert(io.readfile(path), 'file not found')
   return json.decode(text)
+end
+
+function io.readjson_safe(path, default)
+  local res = default or {}
+  if io.exists(path) then
+    res = io.readjson(path)
+  end
+  return res
 end
 
 function io.writejson(f, db)
@@ -193,16 +212,18 @@ function string.split(s, separator)
 	return result
 end
 
-function string:rtrim()
- return (self:gsub("%s+$",""))
+function string:rtrim(ch)
+ local ch = ch or "%s+"
+ return (self:gsub(ch.."$",""))
 end
 
-function string:ltrim()
- return (self:gsub("^%s+",""))
+function string:ltrim(ch)
+ local ch = ch or "%s+"
+ return (self:gsub("^"..ch,""))
 end
 
-function string:trim()
- return (self:ltrim():rtrim())
+function string:trim(ch)
+ return (self:ltrim(ch):rtrim(ch))
 end
 
 local function L(expr)
@@ -252,6 +273,16 @@ local function matchformat(pattern, t)
     end
     return string.format(pattern_copy, unpack(values))
 end
+
+-- return optimal fmt based on maxvalue and a default fmt string
+function optimal_fmt(fmt, maxvalue)
+  local fmt = fmt or "%.2f"
+  local orig_fmt = fmt:match("[^%%]+")
+  local width = string.format(fmt, maxvalue):len()
+  return "%"..width..orig_fmt
+end
+
+
 
 mt=getmetatable("")
 

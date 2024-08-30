@@ -101,18 +101,3 @@ function table.min_max(...)
 end
 
 
-function table.extent(...)
-  local acc={}
-  for i, v in ipairs({...}) do
-    if type(v)=='table' then
-      if #v > 0 then
-        table.insert(acc, math.min(unpack(v)))
-        table.insert(acc, math.max(unpack(v)))
-      end
-    else
-      table.insert(acc, v)
-    end
-  end
-  local tmin, tmax = math.min(unpack(acc)), math.max(unpack(acc))
-  return tmin, tmax
-end

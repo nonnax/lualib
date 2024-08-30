@@ -3,6 +3,7 @@
 -- id$ nonnax fri jul 19 09:59:27 2024
 -- https://github.com/nonnax
 require 'luatools/stdlibx'
+require 'luatools/ansi'
 -- box_grid.lua
 local Colorgrid = {}
 

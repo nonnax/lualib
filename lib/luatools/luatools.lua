@@ -83,6 +83,8 @@ function unpack_map(h, keystr)
   end
   return unpack(vals)
 end
+-- alias
+unpacks = unpack_map
 
 function destructure(t)
   -- return values for matching keys or false
@@ -157,13 +159,26 @@ end
 --     return to_start + (to_stop - to_start) * ((value - value_start) / (value_stop - value_start))
 -- end
 
--- return optimal fmt based on maxvalue and a default fmt string
-function optimal_fmt(fmt, maxvalue)
-  local fmt = fmt or "%.2f"
-  local orig_fmt = fmt:match("[^%%]+")
-  local width = string.format(fmt, maxvalue):len()
-  return "%"..width..orig_fmt
+function rewind_max(vdata, period)
+ local period = period or 1
+ local max = vdata[#vdata]
+ local index = #vdata
+ for i = #vdata, #vdata-period+1, -1 do
+    if vdata[i] > max then index = i  end
+    max = math.max(vdata[i], max)
+ end
+ return index, max
 end
 
+function rewind_min(vdata, period)
+ local period = period or 1
+ local min = vdata[#vdata]
+ local index = #vdata
+ for i = #vdata, #vdata-period+1, -1 do
+    if vdata[i] < min then index = i  end
+    min = math.min(vdata[i], min)
+ end
+ return index, min
+end
 
 require 'luatools/stdlibx'

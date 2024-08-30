@@ -75,10 +75,10 @@ function tabler(t)
 
     self.__index = function(tbl, k)
         -- Return a function that calls the built-in table method if it exists
-        return function(t, ...)
+        return function(tself, ...)
             local func = table[k]
             if func then
-                local ret = func(t, ...)
+                local ret = func(tself, ...)
                 if type(ret)=='table' then
                     return tabler(ret)
                 end
@@ -91,7 +91,7 @@ function tabler(t)
                     return ret
                 else
                     -- Return the result or the original table for chainable methods
-                    return ret or tbl
+                    return ret
                 end
             else
                 -- Print an error message for undefined methods
@@ -163,27 +163,20 @@ function table.merge(fx, ...)
 end
 
 
-function table.reduce_map(fx, init, t, col)
-    local prod=function(acc, tx)
-        return fx(acc, tx[col])
-    end
-    return table.reduce(prod, t, init)
-end
-
-function table.reduce(t, fx, init)
-	local acc = init or {}
-	for key, value in iterator(t) do
-		acc = fx(acc, key, value)
-	end
-	return acc
-end
-
 function table.pop(t)
-    return table.remove(t)
+    table.remove(t)
+    return t
 end
 
 function table.shift(t)
-    return table.remove(t, 1)
+    table.remove(t, 1)
+    return t
+end
+
+local __xinsert = table.insert
+function table.insert(t, v)
+    __xinsert(t, v)
+    return t
 end
 
 -- require lua fun
@@ -198,11 +191,44 @@ end
 -- -- Method to iterate and apply a function to each element
 function table.map(t, func)
   local acc={}
-  for i, v in pairs(t) do
+  for i, v in iterator(t) do
       acc[i] = func(v, i)
   end
-  return tabler(acc)
+  return acc
 end
+
+function table.filter(t, func)
+    local res = {}
+    for i, v in iterator(t) do
+        if func(v, i) then
+            res[i]=v
+        end
+    end
+    return res
+end
+
+function table.reduce(t, fx, init)
+	local acc = init or {}
+	for k, v in ipairs(t) do
+		acc = fx(acc, v, k)
+	end
+	return type(acc)=='table' and tabler(acc) or acc
+end
+
+
+function table.range(start, stop, step)
+    local buff={}
+    if not stop then
+       start = 1
+       stop = start
+    end
+    local step = step or 1
+    for i=start,stop, step do
+       table.insert(buff, i)
+    end
+    return buff
+end
+
 
 
 function table.printmap(t, __order)
@@ -262,7 +288,7 @@ function table.colwidths(t)
 end
 
 function table.keys(t)
-  local all={}
+  local all=tabler{}
   for k, v in t do
     all:insert(k)
   end
@@ -332,29 +358,6 @@ function table.zipmap(a, b)
   return z
 end
 
-function table.filter(t, func)
-    local buff = {}
-    for i, v in iterator(t) do
-        if func(i, v) then
-            buff[i]=v
-        end
-    end
-    return tabler(buff)
-end
-
-function table.range(start, stop, step)
-    local buff={}
-    if not stop then
-       start = 1
-       stop = start
-    end
-    local step = step or 1
-    for i=start,stop, step do
-       table.insert(buff, i)
-    end
-    return buff
-end
-
 -- Function to return the index of the first non-nil value in a table
 function table.first_index(data)
     for i, v in iterator(data) do
@@ -381,7 +384,32 @@ function table.where(rows, patterns)
     end
 
     local predicate = curryfx(patterns)
-    return FP.filter(rows, predicate)
+    return tabler(rows):filter(predicate)
+end
+
+function table.as_pairs(t, from)
+  local n = #t
+  local i = from or 0
+  return function()
+    i=i+2
+    return t[i-1], t[i] or nil
+  end
+end
+
+function table.extent(...)
+  local acc={}
+  for i, v in ipairs({...}) do
+    if type(v)=='table' then
+      if #v > 0 then
+        table.insert(acc, math.min(unpack(v)))
+        table.insert(acc, math.max(unpack(v)))
+      end
+    else
+      table.insert(acc, v)
+    end
+  end
+  local tmin, tmax = math.min(unpack(acc)), math.max(unpack(acc))
+  return tmin, tmax
 end
 
 -- =======================================================
@@ -470,7 +498,12 @@ function TableExtensions:reduce(fn, init)
     for i, v in iterator(self.data) do
         acc = fn(acc, v, i)
     end
-    return acc
+    if type(acc)=='table' then
+        self.data=acc
+        return self
+    else
+        return acc
+    end
 end
 
 function TableExtensions:find(fn)
