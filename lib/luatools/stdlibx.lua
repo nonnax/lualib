@@ -3,9 +3,22 @@
 -- Id$ nonnax Fri Jul  5 16:30:06 2024
 -- https://github.com/nonnax
 -- require 'luatools'
-require 'luatools/tablext'
+-- require 'luatools/tablext'
+lfs = require 'lfs'
 table.unpack = unpack
 
+-- global unpack_map
+function unpack_map(h, keystr)
+  -- return values for matching keys or false
+  local vals={}
+  for k in keystr:gmatch("%S+") do
+    table.insert(vals, h[k] or false) -- using a `nil` substitute causes unpredictable table inserts
+  end
+  return unpack(vals)
+end
+-- alias
+unpacks = unpack_map
+table.unpacks = unpack_map
 -------------------------------------------------------------------------------------
 -- io ext
 -------------------------------------------------------------------------------------
@@ -193,20 +206,53 @@ function os.cols()
   return tonumber(io.capture('tput cols'))
 end
 
+function os.rows()
+  return tonumber(io.capture('tput lines'))
+end
+
+-------------------------------------------------------------------------------------
+-- table ext
+-------------------------------------------------------------------------------------
+local mtablex = {}
+-- multiple value insert
+-- can function like extend when used as mtablex.push(tab, unpack(another_tab))
+function mtablex.push(t, ...)
+  local args = {...}
+  for i=1, #args do -- `for i, n` loop form handles sparse arrays well
+     table.insert(t, args[i])
+  end
+  return t
+end
+-- sort and return
+-- returns: table
+function mtablex.sorted(t, fx)
+  table.sort(t, fx)
+  return t
+end
+
+-- delete and return
+-- returns: table and value removed
+function mtablex.delete(t, i)
+  local v = table.remove(t, i)
+  return t, v
+end
+
+-- update table object
+for k, func in pairs(mtablex) do
+  table[k] = func
+end
 -------------------------------------------------------------------------------------
 -- string ext
 -------------------------------------------------------------------------------------
 
-function string.split(s, separator)
-	if separator == nil then
-		separator = "%s+"
-	end
+function string.split(s, sep)
+	local sep = sep or "%s+"
 	local result = {}
-	local i, j = s:find(separator)
+	local i, j = s:find(sep)
 	while i ~= nil do
 		table.insert(result, s:sub(1, i - 1))
 		s = s:sub(j + 1) or ""
-		i, j = s:find(separator)
+		i, j = s:find(sep)
 	end
 	table.insert(result, s)
 	return result
@@ -248,19 +294,57 @@ local function interpolate(str, subs)
     return str
 end
 
+
+local pad = {}
+
+-- Left padding: Adds padding to the left of the string
+function pad.lpad(text, width, char)
+    char = char or " "
+    local length = #text
+    if length >= width then
+        return text
+    end
+
+    return string.rep(char, width - length) .. text
+end
+
+-- Right padding: Adds padding to the right of the string
+function pad.rpad(text, width, char)
+    char = char or " "
+    local length = #text
+    if length >= width then
+        return text
+    end
+
+    return text .. string.rep(char, width - length)
+end
+
+-- Center padding: Adds padding to both sides of the string
+function pad.center(text, width, char)
+    char = char or " "
+    local length = #text
+    if length >= width then
+        return text
+    end
+
+    local total_padding = width - length
+    local left_padding = math.floor(total_padding / 2)
+    local right_padding = total_padding - left_padding
+
+    return string.rep(char, left_padding) .. text .. string.rep(char, right_padding)
+end
+
+-- merge pad functions into string object
+for k, v in pairs(pad) do
+  string[k] = v
+end
+
+-- string utils
+
 local function format(str, subs)
     return string.format(str, unpack(subs))
 end
 
-
-local function destr(pattern, t)
-  local subt={}
-  for k in string.gmatch(pattern, "%w+") do
-    print(k)
-     subt[k]=t[k]
-  end
-  return subt
-end
 
 local function matchformat(pattern, t)
     local values={}
@@ -283,16 +367,12 @@ function optimal_fmt(fmt, maxvalue)
 end
 
 
-
 mt=getmetatable("")
-
-
 
 string_mt=getmetatable("")
 string_mt.__unm=L
-string_mt.__mul = interpolate
-string_mt.__mod = format
-string_mt.__sub = destr
+string_mt.__mod = interpolate
+-- string_mt.__mod = format
 string_mt.__div = matchformat
 -- update string object
 setmetatable(string, string_mt)
@@ -356,3 +436,102 @@ function math.delta(a, b)
    return b/a-1
 end
 
+----------------------------------------------------
+-- table ext
+----------------------------------------------------
+-- accepts multi-table args, incompatible with Functor mapping
+function table.extent(...)
+  local acc={}
+  for i, v in ipairs({...}) do
+    if type(v)=='table' then
+      if #v > 0 then
+        table.insert(acc, math.min(unpack(v)))
+        table.insert(acc, math.max(unpack(v)))
+      end
+    else
+      table.insert(acc, v)
+    end
+  end
+  local tmin, tmax = math.min(unpack(acc)), math.max(unpack(acc))
+  return tmin, tmax
+end
+
+----------------------------------------------------
+-- F.lua
+-- functional lib
+----------------------------------------------------
+-- local functions
+
+-- top-level type-checker function factory
+local function check_type(name)
+    return function(value)
+        return type(value) == name
+    end
+end
+
+-- functor
+function Map(data)
+  local self = {value = data}
+  function self:map(fx, ...)
+    return Map(fx(self.value, ...))
+  end
+  self._ = self.map
+  return setmetatable(self, {
+    __call=function(self) return self.value end
+  })
+end
+
+local F = {}
+
+function F.each(t, func)
+  -- iterate table
+  for i=1, #t do
+    func(t[i], i)
+  end
+  -- Iterate over the object-like part
+  for k, v in pairs(t) do
+    if type(k) ~= "number" or k > #t then
+      func(v, k)
+    end
+  end
+  return t
+end
+
+
+-- print and return orig args
+function F.print(v)
+  print(v)
+  return v
+end
+
+-- 1. map
+function F.map(array, func)
+  local result = {}
+  for i, v in ipairs(array) do
+    local v = array[i]
+    result[i] = func(v, i)
+  end
+  return result
+end
+
+-- 2. filter
+function F.filter(array, predicate)
+  local result = {}
+  for i, v in ipairs(array) do
+    if predicate(v, i) then result[#result + 1] = v end
+  end
+  return result
+end
+
+-- 3. reduce
+function F.reduce(array, func, initial)
+  local acc = initial
+  for i, v in ipairs(array) do
+    local v = array[i]
+    acc = func(acc, v, i)
+  end
+  return acc
+end
+
+-- make F global
+_G.F = F

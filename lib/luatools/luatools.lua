@@ -5,13 +5,13 @@ require 'lfs'
 
 
 -- table print utils
-function puts(...)
+function table.puts(...)
   for i, e in ipairs({...}) do
     print(json.encode(e))
   end
 end
 
-function dump(t, fx)
+function table.dump(t, fx)
   assert(type(t)=='table', 'not a table')
   for k, v in pairs(t) do
     if type(v) == 'table' then
@@ -29,9 +29,9 @@ function dump(t, fx)
 end
 
 -- helper for iterators w/ function arguments
-function identity(e)
-  return e
-end
+-- function identity(e)
+--   return e
+-- end
 
 -- iterator with pre-processor
 -- function imap(fx, data)
@@ -54,12 +54,12 @@ end
 -- extra math from numbers.lua
 -- iterators
 -- auto-select safe iterator
-function iter(t)
-  if t[1] == nil then
-    return pairs(t)
-  end
-  return ipairs(t)
-end
+-- function iter(t)
+--   if t[1] == nil then
+--     return pairs(t)
+--   end
+--   return ipairs(t)
+-- end
 
 -- ordered pairs map iterator
 function opairs(t, o)
@@ -86,35 +86,35 @@ end
 -- alias
 unpacks = unpack_map
 
-function destructure(t)
-  -- return values for matching keys or false
-  -- local t={a=1, b=2, c=3}
-  -- local a, b = destructure(t){'a', 'b'}
-  return function(idxs)
-    local vals = {}
-    for i, k in ipairs(idxs) do
-      table.insert(vals, t[k] or false)
-    end
-    return unpack(vals)
-  end
-end
+-- function destructure(t)
+--   -- return values for matching keys or false
+--   -- local t={a=1, b=2, c=3}
+--   -- local a, b = destructure(t){'a', 'b'}
+--   return function(idxs)
+--     local vals = {}
+--     for i, k in ipairs(idxs) do
+--       table.insert(vals, t[k] or false)
+--     end
+--     return unpack(vals)
+--   end
+-- end
+--
+-- table.destructure=destructure
 
-table.destructure=destructure
 
-
-function is_map(t)
-  if type(t) ~= "table" then
-    return false
-  end
-
-  for k, _ in pairs(t) do
-    if type(k) ~= "number" or k <= 0 or k ~= math.floor(k) then
-      return true
-    end
-  end
-
-  return false
-end
+-- function is_map(t)
+--   if type(t) ~= "table" then
+--     return false
+--   end
+--
+--   for k, _ in pairs(t) do
+--     if type(k) ~= "number" or k <= 0 or k ~= math.floor(k) then
+--       return true
+--     end
+--   end
+--
+--   return false
+-- end
 
 
 -- function subtable(h, ...)
@@ -128,14 +128,14 @@ end
 --
 -- table.subtable=subtable
 
-function runif(cond, fx)
-  local res
-  if cond then
-    res=fx()
-  end
-  return res
-end
-
+-- function runif(cond, fx)
+--   local res
+--   if cond then
+--     res=fx()
+--   end
+--   return res
+-- end
+--
 
 
 function numberf(number)
@@ -159,7 +159,7 @@ end
 --     return to_start + (to_stop - to_start) * ((value - value_start) / (value_stop - value_start))
 -- end
 
-function rewind_max(vdata, period)
+function table.rewind_max(vdata, period)
  local period = period or 1
  local max = vdata[#vdata]
  local index = #vdata
@@ -170,7 +170,7 @@ function rewind_max(vdata, period)
  return index, max
 end
 
-function rewind_min(vdata, period)
+function table.rewind_min(vdata, period)
  local period = period or 1
  local min = vdata[#vdata]
  local index = #vdata
@@ -179,6 +179,30 @@ function rewind_min(vdata, period)
     min = math.min(vdata[i], min)
  end
  return index, min
+end
+
+function cache(fx, timer, id)
+  return function(...)
+    local f=table.concat({'/tmp/timer', id, '.txt'})
+    local expired = false
+    local data = {}
+    if io.exists(f) then
+      local elapsed = os.time() - io.filetime(f)
+      if elapsed > timer then
+        expired = true
+      else
+        data = io.readjson(f)
+      end
+    else
+      expired = true
+    end
+
+    if expired then
+      data = fx(...)
+      io.writejson(f, data)
+    end
+    return data
+  end
 end
 
 require 'luatools/stdlibx'

@@ -9,10 +9,6 @@ unpack = table.unpack or unpack
 
 function Map(data)
   local self = {value = data}
-  function self.tap(self, fx, ...)
-    fx(self.value, ...)
-    return Map(self.value)
-  end
   function self.map(self, fx, ...)
     return Map(fx(self.value, ...))
   end
@@ -23,23 +19,37 @@ function Map(data)
 end
 
 local __old_print = print
-
 -- print and return orig args
 function print(...)
   __old_print(...)
   return ...
 end
 
-local function iter(t)
-    if type(t) == 'table' then
-      -- If property of 1 is empty then
-      -- iterate as a regular keyed table
-      if t[1] == nil then
-        return pairs(t)
-      end
-      return ipairs(t)
+-- local function F.iter(t)
+--     if type(t) == 'table' then
+--       -- If property of 1 is empty then
+--       -- F.iterate as a regular keyed table
+--       if t[1] == nil then
+--         return pairs(t)
+--       end
+--       return ipairs(t)
+--     end
+--     error('Expected table, got ' .. tostring(t))
+-- end
+
+function F.iter(t)
+  return coroutine.wrap(function()
+    -- iterate table
+    for i=1, #t do
+      coroutine.yield(i, t[i])
     end
-    error('Expected table, got ' .. tostring(t))
+    -- iterate over the object-like part
+    for k, v in pairs(t) do
+      if type(k) ~= "number" or k > #t then
+        coroutine.yield(k, v)
+      end
+    end
+  end)
 end
 
 --- Map function
@@ -50,7 +60,7 @@ end
 
 function Functional.map(tbl, func)
     local result = {}
-    for i, v in iter(tbl) do
+    for i, v in F.iter(tbl) do
         result[i] = func(v, i)
     end
     return result
@@ -65,7 +75,7 @@ end
 -- @return any: The result of the reduction
 function Functional.reduce(tbl, func, initial)
     local acc = initial
-    for i, v in iter(tbl) do
+    for i, v in F.iter(tbl) do
         acc = func(acc, v, i)
     end
     return acc
@@ -78,7 +88,7 @@ end
 -- @return table: A new table with only the elements that satisfy the predicate
 function Functional.filter(tbl, predicate)
     local result = {}
-    for i, v in iter(tbl) do
+    for i, v in F.iter(tbl) do
         if predicate(v, i) then
             table.insert(result, v)
         end
@@ -93,7 +103,7 @@ end
 -- @return table: A new table with return mapped result that satisfy the predicate
 function Functional.filtermap(tbl, predicateFunc)
     local result = {}
-    for i, v in iter(tbl) do
+    for i, v in F.iter(tbl) do
         local mappedValue = predicateFunc(v, i)
         if mappedValue ~= nil then
             table.insert(result, mappedValue)
@@ -124,7 +134,7 @@ end
 -- @param predicate function: The function to determine if an element satisfies the condition
 -- @return any, number: The first element that satisfies the predicate and its index, or nil if not found
 function Functional.find(tbl, predicate)
-    for i, v in iter(tbl) do
+    for i, v in F.iter(tbl) do
         if predicate(v, i) then
             return v, i
         end
@@ -138,7 +148,7 @@ end
 -- @param predicate function: The function to determine if an element satisfies the condition
 -- @return boolean: True if all elements satisfy the predicate, false otherwise
 function Functional.every(tbl, predicate)
-    for i, v in iter(tbl) do
+    for i, v in F.iter(tbl) do
         if not predicate(v, i) then
             return false
         end
@@ -152,7 +162,7 @@ end
 -- @param predicate function: The function to determine if an element satisfies the condition
 -- @return boolean: True if at least one element satisfies the predicate, false otherwise
 function Functional.some(tbl, predicate)
-    for i, v in iter(tbl) do
+    for i, v in F.iter(tbl) do
         if predicate(v, i) then
             return true
         end
@@ -191,7 +201,7 @@ end
 function Functional.flatten(tbl)
     local result = {}
     local function flattenHelper(t)
-        for _, v in iter(t) do
+        for _, v in F.iter(t) do
             if type(v) == "table" then
                 flattenHelper(v)
             else
@@ -231,7 +241,7 @@ function Functional.unzip(tbl)
     for i = 1, length do
         result[i] = {}
     end
-    for _, tuple in iter(tbl) do
+    for _, tuple in F.iter(tbl) do
         for j, value in ipairs(tuple) do
             table.insert(result[j], value)
         end
@@ -325,12 +335,8 @@ function Functional.partition(tbl, predicateFunc)
         [true]={},
         [false]={}
     }
-    for _, v in iter(tbl) do
-        if predicateFunc(v) then
-            table.insert(partitions[true], v)
-        else
-            table.insert(partitions[false], v)
-        end
+    for _, v in F.iter(tbl) do
+        table.insert(partitions[ predicateFunc(v) == true ], v)
     end
 
     return partitions
@@ -371,9 +377,10 @@ function Functional.last(tbl, n)
     return result
 end
 
-function Functional.insert(tbl, idx, v)
-    local params=Functional.filter({idx, v}, -[[ x | x ~= nil ]])
-    table.insert(tbl, unpack(params))
+function Functional.insert(tbl, v)
+    -- local params = Functional.filter({idx, v}, -[[ x | x ~= nil ]])
+    -- table.insert(tbl, unpack(params))
+    table.insert(tbl, v)
     return tbl
 end
 
@@ -385,13 +392,6 @@ end
 function Functional.remove(tbl, n)
     table.remove(tbl, n)
     return tbl
-end
-
---- make functions available globally for small codebases
-function Functional.global()
-    for name, fx in pairs(Functional) do
-        _G[name]=fx
-    end
 end
 
 function Functional.once(fx, gx)
@@ -408,11 +408,19 @@ end
 
 function Functional.times(stop, fx)
     local result = {}
-    for i = 1, stop - 1 do
+    for i = 1, stop do
         table.insert(result, fx(i))
     end
     return result
 end
 
+-----------------------------------------------------------
+--- make functions available globally for small codebases
+-----------------------------------------------------------
+function Functional.global()
+    for name, fx in pairs(Functional) do
+        _G[name]=fx
+    end
+end
 
 return Functional

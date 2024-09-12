@@ -4,38 +4,70 @@
 -- https://github.com/nonnax
 
 -- local functions
+-- generic iterator that iterates over tables and/or objects
 
 -- string lambda
-local function __Lambda(expr)
-    local args, body = expr:match("^%s*|?s*(.*)|(.*)") ---@type string, string
-    if body:match(";") then
-        local xs = body:split("[^;]+")
-        local head={}
-        for i=1,#xs-1 do
-           head[#head+1]=xs[i]..";"
+-- local function __lambda(expr)
+--     local args, body = expr:match("^%s*|?s*(.*)|(.*)") ---@type string, string
+--     if body:match(";") then
+--         local xs = body:split("[^;]+")
+--         local head={}
+--         for i=1,#xs-1 do
+--            table.insert(head, xs[i]..";")
+--         end
+--         body = table.concat(head).." return "..xs[#xs]
+--     end
+--     if not body:match("return") then body = "return "..body end
+--     return loadstring("return function("..args..") "..body.."; end")() ---@type function
+-- end
+local function __lambda(expr)
+    local args, body = expr:match("^%s*|?%s*(.-)|%s*(.*)$") ---@type string, string
+
+    -- Optimize the handling of multiple expressions in the body
+    if body:find(";") then
+        -- Split the body by semicolons
+        local statements = {}
+        for statement in body:gmatch("[^;]+") do
+            statements[#statements + 1] = statement
         end
-        body = table.concat(head).." return "..xs[#xs]
+        -- Combine the body, ensuring the last statement is returned
+        if #statements > 1 then
+            body = table.concat(statements, ";", 1, #statements - 1) .. "; return " .. statements[#statements]
+        end
     end
-    if not body:match("return") then body = "return "..body end
-    return loadstring("return function("..args..") "..body.."; end")() ---@type function
+
+    -- Ensure the body has a return statement if it is missing
+    if not body:find("return") then
+        body = "return " .. body
+    end
+
+    -- Dynamically compile and return the lambda function
+    return assert(loadstring("return function(" .. args .. ") " .. body .. "; end"))()
 end
 
-string_mt = getmetatable("")
-string_mt.__unm = __Lambda
 
+string_mt = getmetatable("")
+string_mt.__unm = __lambda
+
+-- top-level type-checker function factory
 local function check_type(name)
     return function(value)
         return type(value) == name
     end
 end
 
-function Map(data)
+
+----------------------------------------------------
+-- F.lua
+-- functional lib
+----------------------------------------------------
+local F = {}
+
+
+-- functor
+function F.Map(data)
   local self = {value = data}
-  function self.tap(self, fx, ...)
-    fx(self.value, ...)
-    return Map(self.value)
-  end
-  function self.map(self, fx, ...)
+  function self:map(fx, ...)
     return Map(fx(self.value, ...))
   end
   self._ = self.map
@@ -44,11 +76,34 @@ function Map(data)
   })
 end
 
-----------------------------------------------------
--- F.lua
--- functional lib
-----------------------------------------------------
-local F = {}
+function F.iter(t)
+  return coroutine.wrap(function()
+    -- iterate table
+    for i=1, #t do
+      coroutine.yield(t[i], i)
+    end
+    -- Iterate over the object-like part
+    for k, v in pairs(t) do
+      if type(k) ~= "number" or k > #t then
+        coroutine.yield(v, k)
+      end
+    end
+  end)
+end
+
+function F.each(t, func)
+  -- iterate table
+  for i=1, #t do
+    func(t[i], i)
+  end
+  -- Iterate over the object-like part
+  for k, v in pairs(t) do
+    if type(k) ~= "number" or k > #t then
+      func(v, k)
+    end
+  end
+  return t
+end
 
 -- print and return orig args
 function F.print(v)
@@ -56,34 +111,19 @@ function F.print(v)
   return v
 end
 
-local function each(array, func)
-  if #array > 0 then
-    for i=1, #array do
-      local v = array[i]
-      func(v, i)
-    end
-  else
-    for k, v in pairs(array) do
-      func(v, k)
-    end
-  end
-  return array
-end
-
 -- 1. map
 function F.map(array, func)
-  local result = {}
-  each(array, function(v, i)
-    local v = array[i]
-    result[i] = func(v, i)
-  end)
-  return result
+    local result = {}
+    for i, v in ipairs(array) do
+        result[i] = func(v, i)
+    end
+    return result
 end
 
 -- 2. filter
 function F.filter(array, predicate)
   local result = {}
-  each(array, function(v, i)
+  F.each(array, function(v, i)
     if predicate(v, i) then result[#result + 1] = v end
   end)
   return result
@@ -92,22 +132,40 @@ end
 -- 3. reduce
 function F.reduce(array, func, initial)
   local acc = initial
-  each(array, function(v, i)
-    local v = array[i]
+  F.each(array, function(v, i)
     acc = func(acc, v, i)
   end)
   return acc
 end
 
--- 4. each
-F.each = each
+-- 4. F.each
 
 -- 5. flat_map
-function F.flat_map(array, func)
-  local result = {}
-  for i, v in ipairs(array) do
-    local mapped = func(v, i)
-    for _, mv in ipairs(mapped) do result[#result + 1] = mv end
+-- 5. flatMap (refactored with each)
+function F.flatmap(array, func)
+    local result = {}
+    F.each(array, function(v, i)
+        local mapped = func(v, i)
+        for _, mv in ipairs(mapped) do
+            result[#result + 1] = mv
+        end
+    end)
+    return result
+end
+
+function F.flatrows(tbl, result)
+  result = result or {} -- Initialize the result table if not provided
+
+  for _, v in ipairs(tbl) do
+    if type(v) == "table" then
+      if #v == 0 then
+        -- If the table is non-list (e.g., has named keys), add it to the result
+        table.insert(result, v)
+      else
+        -- Otherwise, recursively process the nested table
+        F.flatrows(v, result)
+      end
+    end
   end
   return result
 end
@@ -205,18 +263,18 @@ function F.drop_while(array, predicate)
 end
 
 -- 15. partition
+-- 7. partition (refactored with each)
 function F.partition(array, predicate)
-  local pass, fail = {}, {}
-  for i, v in ipairs(array) do
-    if predicate(v) then
-      pass[#pass + 1] = v
-    else
-      fail[#fail + 1] = v
-    end
-  end
-  return pass, fail
+    local pass, fail = {}, {}
+    F.each(array, function(v)
+        if predicate(v) then
+            pass[#pass + 1] = v
+        else
+            fail[#fail + 1] = v
+        end
+    end)
+    return pass, fail
 end
-
 -- 16. find_index
 function F.find_index(array, predicate)
   for i, v in ipairs(array) do if predicate(v, i) then return i end end
@@ -224,22 +282,19 @@ function F.find_index(array, predicate)
 end
 
 -- 18. union
+-- 8. union (refactored with each)
 function F.union(array1, array2)
-  local set = {}
-  local result = {}
-  for _, v in ipairs(array1) do
-    if not set[v] then
-      result[#result + 1] = v
-      set[v] = true
+    local set = {}
+    local result = {}
+    local function addIfNotExists(v)
+        if not set[v] then
+            result[#result + 1] = v
+            set[v] = true
+        end
     end
-  end
-  for _, v in ipairs(array2) do
-    if not set[v] then
-      result[#result + 1] = v
-      set[v] = true
-    end
-  end
-  return result
+    F.each(array1, addIfNotExists)
+    F.each(array2, addIfNotExists)
+    return result
 end
 
 -- 19. intersection
@@ -298,6 +353,25 @@ end
 -- 26. last
 function F.last(array) return array[#array] end
 
+--- Flatten function
+-- Flattens a nested table into a single-level table
+-- @param tbl table: The input nested table
+-- @return table: A new table with the flattened values
+function F.flatten(tbl)
+    local result = {}
+    local function flattenHelper(t)
+        for v in iter(t) do
+            if type(v) == "table" then
+                flattenHelper(v)
+            else
+                table.insert(result, v)
+            end
+        end
+    end
+    flattenHelper(tbl)
+    return result
+end
+
 -- 27. flatten_deep
 function F.flatten_deep(array)
   local result = {}
@@ -325,20 +399,80 @@ function F.scan(array, func, initial)
 end
 
 -- 29. group_with
-function F.group_with(array, predicate)
-  local result = {}
-  local group = {array[1]}
-  for i = 2, #array do
-    if predicate(array[i - 1], array[i]) then
-      group[#group + 1] = array[i]
-    else
-      result[#result + 1] = group
-      group = {array[i]}
+-- function F.group_with(array, predicate)
+--   local result = {}
+--   local group = {array[1]}
+--   for i = 2, #array do
+--     if predicate(array[i - 1], array[i]) then
+--       group[#group + 1] = array[i]
+--     else
+--       result[#result + 1] = group
+--       group = {array[i]}
+--     end
+--   end
+--   result[#result + 1] = group
+--   return result
+-- end
+
+-- group_with: This function groups items based on a relationship between them,
+-- typically defined by a user-provided predicate function.
+-- Instead of extracting a key, group_with checks if two items should belong to
+-- the same group based on the predicate.
+
+function F.group_with(data, predicate)
+    local grouped = {}
+    local used = {}
+
+    for i = 1, #data do
+        if not used[i] then
+            local group = {data[i]}
+            used[i] = true
+            for j = i + 1, #data do
+                if not used[j] and predicate(data[i], data[j]) then
+                    table.insert(group, data[j])
+                    used[j] = true
+                end
+            end
+            table.insert(grouped, group)
+        end
     end
-  end
-  result[#result + 1] = group
-  return result
+
+    return grouped
 end
+
+-- Example usage: Group consecutive numbers
+-- local numbers = {1, 2, 2, 3, 4, 4, 5}
+--
+-- local grouped_with_consecutives = group_with(numbers, function(a, b)
+--     return a == b
+-- end)
+
+-- Result:
+-- grouped_with_consecutives = { {1}, {2, 2}, {3}, {4, 4}, {5} }
+
+
+-- General-purpose group_by function
+-- group_by: This function groups items based on a computed key derived from F.each item.
+-- The key is usually extracted by a user-provided function.
+-- It allows flexibility in determining what constitutes a group by defining how the key is computed.
+function F.group_by(data, fx)
+    local grouped = {}
+    for _, entry in ipairs(data) do
+        local key = fx(entry)
+        grouped[key] = grouped[key] or {}
+        table.insert(grouped[key], entry)
+    end
+    return grouped
+end
+-- Example usage: Group numbers by their parity (even or odd)
+-- local numbers = {1, 2, 3, 4, 5, 6}
+
+-- local grouped_by_parity = group_by(numbers, function(n)
+--     return n % 2 == 0 and "even" or "odd"
+-- end)
+
+-- Result:
+-- grouped_by_parity = { ["even"] = {2, 4, 6}, ["odd"] = {1, 3, 5} }
 
 -- 30. transpose
 function F.transpose(matrix)
@@ -385,17 +519,22 @@ function F.comp_producer(f, g) return function(x) return f(g(x)) end end
 -- table parallel functions
 ---------------------------------------------------------------
 function F.insert(t, ...)
-  local params={}
+  -- params to handle insertions with index.
+  -- i.e. table.insert(t, index, val)
+  local params = {}
+  -- copy to avoid mutation
+  local copy = {unpack(t)}
   for _, x in ipairs({...}) do
     table.insert(params, x)
   end
-  table.insert(t, unpack(params))
-  return t
+  table.insert(copy, unpack(params))
+  return copy
 end
 
 function F.sort(t, fx)
-  table.sort(t, fx)
-  return t
+  local copy = {unpack(t)}
+  table.sort(copy, fx)
+  return copy
 end
 
 function F.contains(t, v)
@@ -404,13 +543,25 @@ function F.contains(t, v)
   end
 end
 
-function F.find(t, fx)
-  for i, x in ipairs(t) do
-     if fx(x) then
-      return x, i
-     end
-  end
+-- function F.find(t, fx)
+--   for i, x in ipairs(t) do
+--      if fx(x) then
+--       return x, i
+--      end
+--   end
+-- end
+
+-- 6. find (refactored with each)
+function F.find(array, predicate)
+    local found
+    F.each(array, function(v, i)
+        if not found and predicate(v, i) then
+            found = {value = v, index = i}
+        end
+    end)
+    return found and found.value, found and found.index
 end
+
 
 -- 6. find
 -- function F.find(array, predicate)
@@ -443,6 +594,8 @@ function F.reorder(t)
   end
   return res
 end
+-- ruby alias
+F.compact = F.reorder
 
 function F.remove(t, ...)
   local params={}
@@ -477,16 +630,20 @@ end
 function F.times(stop, fx)
   local res={}
   for i=1, stop do
-    table.insert(res, fx(i))
+    table.insert(res, fx(i) or i)
   end
   return res
 end
 
 function F.keys(t)
   local res={}
-  for k, v in pairs(t) do
-    table.insert(res, k)
-  end
+  for k, _v in pairs(t) do table.insert(res, k) end
+  return res
+end
+
+function F.values(t)
+  local res={}
+  for _k, v in pairs(t) do table.insert(res, v) end
   return res
 end
 
@@ -509,6 +666,7 @@ F.dec = function(v) return v - 1 end
 F.id = function(v) return v end
 F.swap = function(a, b) return b, a end
 F.const = function(x) return function() return x end end
+
 ---------------------------------------------------------------
 -- validators
 ---------------------------------------------------------------
@@ -519,11 +677,56 @@ F.is_infinite = function(value) return not F.is_finite(value) end
 F.is_nan = function(value) return value ~= value end
 F.is_integer = function(value) return value % 1 == 0 end
 
+function F.is_object(t)
+  if type(t) ~= "table" then
+    return false
+  end
+
+  for k, _ in pairs(t) do
+    if type(k) ~= "number" or k <= 0 or k ~= math.floor(k) then
+      return true
+    end
+  end
+
+  return false
+end
+
 F.is_userdata = check_type("userdata")
 F.is_table = check_type("table")
 F.is_string = check_type("string")
 F.is_function = check_type("function")
 F.is_number = check_type("number")
 F.is_boolean = check_type("boolean")
+F.is_coroutine = check_type("thread")
 
+local mtablex = {}
+-- multiple value insert
+-- can function like extend when used as mtablex.push(tab, unpack(another_tab))
+function mtablex.push(t, ...)
+  local args = {...}
+  for i=1, #args do -- `for i, n` loop form handles sparse arrays well
+     table.insert(t, args[i])
+  end
+  return t
+end
+-- sort and return
+-- returns: table
+function mtablex.sorted(t, fx)
+  table.sort(t, fx)
+  return t
+end
+
+-- delete and return
+-- returns: table and value removed
+function mtablex.delete(t, i)
+  local v = table.remove(t, i)
+  return t, v
+end
+
+-- update table object
+for k, func in pairs(mtablex) do
+  F[k] = F[k] or func
+end
+
+_G.F = F
 return F

@@ -30,7 +30,9 @@ function copas_getall(endpoints, t)
     if stat then data[symbol] = res end
     copas.pause(1)
   end
-  for symbol, url in pairs(endpoints) do copas.addthread(get, url, t, symbol) end
+  for symbol, url in pairs(endpoints) do
+    copas.addthread(get, url, t, symbol)
+  end
   copas()
 end
 
@@ -39,9 +41,10 @@ function copas_add(urls, store)
     local body, err = http.request(u)
     table.insert(t, json.decode(body))
   end
-  for i, u in pairs(urls) do copas.addthread(get, u, store) end
-  copas()
-  return store[1]
+  for i, u in pairs(urls) do
+    copas.addthread(get, u, store)
+  end
+  -- copas()
 end
 
 copas.addurls = copas_add
